@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-ibm-plex-mono);
+  --font-heading: var(--font-quicksand);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,73 +48,104 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Paleta e tipografia definidas em "Estação Saúde — Proposta de Arquitetura &
+   Design System" (protótipo de referência) — rosa como identidade, vermelho e
+   âmbar reservados só pra estado (nunca dividem tom com a cor de marca). */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #f3eff6;
+  --foreground: #463b4c;
+  --card: #ffffff;
+  --card-foreground: #463b4c;
+  --popover: #ffffff;
+  --popover-foreground: #463b4c;
+  --primary: #e58fb0;
+  --primary-foreground: #ffffff;
+  --secondary: #ece1ef;
+  --secondary-foreground: #463b4c;
+  --muted: #fbf6fb;
+  --muted-foreground: #8c7f92;
+  --accent: #fbe1eb;
+  --accent-foreground: #d06e96;
+  --destructive: #d2554f;
+  --border: #e6dcea;
+  --input: #f0e9f3;
+  --ring: #e58fb0;
+  --chart-1: #e58fb0;
+  --chart-2: #4e9c8e;
+  --chart-3: #5c86bd;
+  --chart-4: #4f9a68;
+  --chart-5: #8b6fc4;
+  --radius: 1.125rem;
+  --sidebar: #fbf6fb;
+  --sidebar-foreground: #463b4c;
+  --sidebar-primary: #e58fb0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ece1ef;
+  --sidebar-accent-foreground: #463b4c;
+  --sidebar-border: #e6dcea;
+  --sidebar-ring: #e58fb0;
+
+  /* Cores por especialidade — só pra badges/acentos que precisam distinguir
+     área, não fazem parte do sistema de tokens do shadcn. */
+  --area-fisio: #4e9c8e;
+  --area-fisio-soft: #e1f3ee;
+  --area-odonto: #5c86bd;
+  --area-odonto-soft: #e7ecf5;
+  --area-nutri: #4f9a68;
+  --area-nutri-soft: #e4f3e7;
+  --area-psico: #8b6fc4;
+  --area-psico-soft: #f0ecf9;
+  --atencao: #c6923a;
+  --atencao-soft: #fbedd6;
+  --ok: #4e9c8e;
+  --ok-soft: #e1f3ee;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #1c1720;
+  --foreground: #eee6f1;
+  --card: #241d29;
+  --card-foreground: #eee6f1;
+  --popover: #241d29;
+  --popover-foreground: #eee6f1;
+  --primary: #ee9dba;
+  --primary-foreground: #2a1520;
+  --secondary: #352a3d;
+  --secondary-foreground: #eee6f1;
+  --muted: #2a2130;
+  --muted-foreground: #b4a6bb;
+  --accent: #3b2530;
+  --accent-foreground: #f3b0cb;
+  --destructive: #e0766f;
+  --border: #3a2f44;
+  --input: #2e2536;
+  --ring: #ee9dba;
+  --chart-1: #ee9dba;
+  --chart-2: #6fbbab;
+  --chart-3: #7ca3da;
+  --chart-4: #72ba8a;
+  --chart-5: #ac93de;
+  --sidebar: #241d29;
+  --sidebar-foreground: #eee6f1;
+  --sidebar-primary: #ee9dba;
+  --sidebar-primary-foreground: #2a1520;
+  --sidebar-accent: #352a3d;
+  --sidebar-accent-foreground: #eee6f1;
+  --sidebar-border: #3a2f44;
+  --sidebar-ring: #ee9dba;
+
+  --area-fisio: #6fbbab;
+  --area-fisio-soft: #1c312d;
+  --area-odonto: #7ca3da;
+  --area-odonto-soft: #24304a;
+  --area-nutri: #72ba8a;
+  --area-nutri-soft: #1f3126;
+  --area-psico: #ac93de;
+  --area-psico-soft: #2e2740;
+  --atencao: #d9aa5c;
+  --atencao-soft: #392f1d;
+  --ok: #6fbbab;
+  --ok-soft: #1c312d;
 }
 
 @layer base {
@@ -126,5 +157,8 @@
   }
   html {
     @apply font-sans;
+  }
+  h1, h2, h3, h4 {
+    @apply font-heading;
   }
 }
