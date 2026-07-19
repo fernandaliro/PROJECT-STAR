@@ -1,0 +1,9 @@
+# Segredos locais — nunca devem subir no deploy. As variáveis de ambiente
+# reais ficam configuradas direto no projeto Vercel (vercel env add).
+.env
+.env.local
+.env*.local
+
+node_modules
+.next
+/src/generated/prisma
