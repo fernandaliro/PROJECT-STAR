@@ -1,0 +1,436 @@
+// Star — schema do sistema de gestão de agenda clínica.
+// Princípio central (ver project.md seção 2 e 6): nunca apagar dados. Toda
+// entidade "removível" usa um campo de status/ativo, nunca hard-delete.
+// A aplicação nunca chama `.delete()`/`.deleteMany()` — reforçado por regra de ESLint.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum PatientStatus {
+  ATIVO
+  INATIVO
+}
+
+enum LinkStatus {
+  ATIVO
+  ALTA
+}
+
+enum Especialidade {
+  FISIOTERAPIA
+  ODONTOLOGIA
+  NUTRICAO
+  PSICOLOGIA
+  // Profissionais listados em project.md §8 sob "Outros profissionais", sem
+  // formação/especialidade explicitada na spec (ver §10 — ainda em aberto).
+  OUTRA
+}
+
+enum TipoAtendimento {
+  INDIVIDUAL
+  GRUPO
+}
+
+enum ModalidadeFisio {
+  FISIOTERAPIA
+  PILATES
+  ACUPUNTURA
+  VENTOSA
+  URGENCIA
+  ENCAIXE
+  AVALIACAO
+}
+
+enum DiaSemana {
+  SEGUNDA
+  TERCA
+  QUARTA
+  QUINTA
+  SEXTA
+  SABADO
+  DOMINGO
+}
+
+// Classificação manual em 4 status (não um cálculo automático de antecedência):
+// só FALTA_INJUSTIFICADA gera multa. DESMARCADO exige motivo de uma lista fixa
+// (ver lib/constants.ts MOTIVOS_DESMARQUE) — é o motivo que já documenta se
+// houve aviso com antecedência ou não, em vez de comparar horários.
+enum OccurrenceStatus {
+  CONFIRMADO
+  DESMARCADO
+  FALTA_JUSTIFICADA
+  FALTA_INJUSTIFICADA
+}
+
+enum WaitlistStatus {
+  AGUARDANDO
+  CONTATADO
+  AGENDADO
+  DESISTIU
+}
+
+enum PendencyStatus {
+  ABERTA
+  JUSTIFICADA
+  PAGA
+  ABONADA
+  // Gerada automaticamente por falta injustificada que depois foi corrigida
+  // para outro status (erro de lançamento) — nunca apagamos a pendência,
+  // só marcamos que ela deixou de valer.
+  CANCELADA
+}
+
+enum PendencyOrigin {
+  FALTA_INJUSTIFICADA
+}
+
+enum CollectionChannel {
+  TEAMS
+  EMAIL
+  PRESENCIAL
+  OUTRO
+}
+
+enum CsvRowStatus {
+  VALIDA
+  DESCARTADA_MALFORMADA
+}
+
+enum DiffClassification {
+  PACIENTE_NOVO
+  DESMARCACAO_FALTA_DIA
+  ALTA_APLICADA
+  POSSIVEL_ALTA_PENDENTE
+  MUDANCA_ESTRUTURAL
+}
+
+// ---------------------------------------------------------------------------
+// Pacientes — cadastro único e central (project.md §5.1, §5.2.1)
+// ---------------------------------------------------------------------------
+
+model Patient {
+  id              String        @id @default(cuid())
+  matriculaSigop  String        @unique
+  nomeCompleto    String
+  nomeNormalizado String
+  status          PatientStatus @default(ATIVO)
+  observacoes     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  links           PatientTurmaLink[]
+  altas           Alta[]
+  waitlistEntries WaitlistEntry[]
+  pendencies      FinancialPendency[]
+  absenceStreaks  TurmaAbsenceStreak[]
+  csvDiffResults  CsvDiffResult[]
+
+  @@index([nomeNormalizado])
+}
+
+// ---------------------------------------------------------------------------
+// Profissionais e escalas (project.md §5.6, §8)
+// ---------------------------------------------------------------------------
+
+model Professional {
+  id            String        @id @default(cuid())
+  nome          String
+  especialidade Especialidade
+  ativo         Boolean       @default(true)
+  observacoes   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  schedules       ProfessionalSchedule[]
+  turmaSlots      TurmaSlot[]
+  aliases         ProfessionalAlias[]
+  waitlistEntries WaitlistEntry[]
+  csvImports      CsvImport[]
+
+  @@unique([nome, especialidade])
+}
+
+model ProfessionalSchedule {
+  id             String       @id @default(cuid())
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id])
+  diaSemana      DiaSemana?
+  horaInicio     String?
+  horaFim        String?
+  sobDemanda     Boolean      @default(false)
+  ativo          Boolean      @default(true)
+  observacoes    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([professionalId])
+}
+
+// Nome bruto do profissional como aparece em exportações do SIGOP, para
+// resolver o CSV sem precisar alterar código quando a grafia varia.
+model ProfessionalAlias {
+  id             String       @id @default(cuid())
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id])
+  aliasNomeCru   String       @unique
+}
+
+// ---------------------------------------------------------------------------
+// Turmas — identidade = dia + horário + profissional (+ tipo) (project.md §11)
+// Nome da turma NUNCA é persistido: é sempre computado a partir dos vínculos
+// ativos menos altas (ver src/lib/turma-name.ts).
+// ---------------------------------------------------------------------------
+
+model TurmaSlot {
+  id              String           @id @default(cuid())
+  diaSemana       DiaSemana
+  horario         String
+  professionalId  String
+  professional    Professional     @relation(fields: [professionalId], references: [id])
+  tipoAtendimento TipoAtendimento
+  modalidade      ModalidadeFisio?
+  especialidade   Especialidade
+  // Vagas máximas de pacientes com vínculo ativo. null = sem limite (turmas de
+  // grupo sem teto definido). Usado pela sugestão automática da fila de espera
+  // para saber se há "vaga livre" (project.md §10).
+  capacidade      Int?
+  ativo           Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  links               PatientTurmaLink[]
+  altas               Alta[]
+  occurrenceEvents    TurmaOccurrenceEvent[]
+  csvDiffResults      CsvDiffResult[]
+  absenceStreaks      TurmaAbsenceStreak[]
+  waitlistSuggestions WaitlistSuggestion[]
+
+  @@unique([diaSemana, horario, professionalId, tipoAtendimento])
+}
+
+// Vínculo paciente-turma: entidade própria (project.md §5.2.1). dataSaida só
+// é preenchida quando há alta formal — desmarcação/falta não tocam aqui.
+model PatientTurmaLink {
+  id          String     @id @default(cuid())
+  patientId   String
+  patient     Patient    @relation(fields: [patientId], references: [id])
+  turmaSlotId String
+  turmaSlot   TurmaSlot  @relation(fields: [turmaSlotId], references: [id])
+  status      LinkStatus @default(ATIVO)
+  dataEntrada DateTime
+  dataSaida   DateTime?
+  altaId      String?    @unique
+  alta        Alta?      @relation(fields: [altaId], references: [id])
+  observacoes String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  occurrenceEvents TurmaOccurrenceEvent[]
+  absenceStreak    TurmaAbsenceStreak?
+  // Um índice único parcial (WHERE status = 'ATIVO') garantindo só um vínculo
+  // ativo por paciente+turma é adicionado manualmente na migration SQL — ver
+  // comentário no arquivo de migration gerado, Prisma não expressa WHERE em @@unique.
+
+  @@index([patientId])
+  @@index([turmaSlotId])
+}
+
+model Alta {
+  id            String    @id @default(cuid())
+  patientId     String
+  patient       Patient   @relation(fields: [patientId], references: [id])
+  turmaSlotId   String
+  turmaSlot     TurmaSlot @relation(fields: [turmaSlotId], references: [id])
+  dataAlta      DateTime
+  motivo        String?
+  registradoPor String
+  createdAt     DateTime  @default(now())
+
+  link PatientTurmaLink?
+}
+
+// Evento por data (desmarcação/falta/realizado) — NÃO altera o vínculo.
+model TurmaOccurrenceEvent {
+  id             String           @id @default(cuid())
+  linkId         String
+  link           PatientTurmaLink @relation(fields: [linkId], references: [id])
+  turmaSlotId    String
+  turmaSlot      TurmaSlot        @relation(fields: [turmaSlotId], references: [id])
+  data           DateTime
+  status         OccurrenceStatus
+  motivo         String?
+  registradoPor  String?
+  origemImportId String?
+  csvImport      CsvImport?       @relation(fields: [origemImportId], references: [id])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  pendency FinancialPendency?
+
+  @@unique([linkId, data])
+  @@index([turmaSlotId, data])
+}
+
+// ---------------------------------------------------------------------------
+// Fila de espera (project.md §5.4)
+// ---------------------------------------------------------------------------
+
+model WaitlistEntry {
+  id                        String         @id @default(cuid())
+  patientId                 String
+  patient                   Patient        @relation(fields: [patientId], references: [id])
+  especialidade             Especialidade
+  dataAvaliacao             DateTime
+  prioridade                Int
+  disponibilidade           Json
+  profissionalResponsavelId String?
+  profissionalResponsavel   Professional?  @relation(fields: [profissionalResponsavelId], references: [id])
+  tratamentoIndicado        String
+  dentesEnvolvidos          String?
+  rx                        Boolean?
+  retratamento              Boolean?
+  observacoes               String?
+  status                    WaitlistStatus @default(AGUARDANDO)
+  dataEntradaFila           DateTime       @default(now())
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+
+  suggestions WaitlistSuggestion[]
+
+  @@index([especialidade, status])
+}
+
+model WaitlistSuggestion {
+  id              String        @id @default(cuid())
+  waitlistEntryId String
+  waitlistEntry   WaitlistEntry @relation(fields: [waitlistEntryId], references: [id])
+  turmaSlotId     String
+  turmaSlot       TurmaSlot     @relation(fields: [turmaSlotId], references: [id])
+  tipo            String
+  sugeridoEm      DateTime      @default(now())
+  aceito          Boolean?
+  observacoes     String?
+}
+
+// ---------------------------------------------------------------------------
+// Financeiro (project.md §5.5)
+// ---------------------------------------------------------------------------
+
+model FinancialPendency {
+  id                     String                @id @default(cuid())
+  patientId              String
+  patient                Patient               @relation(fields: [patientId], references: [id])
+  origem                 PendencyOrigin
+  occurrenceEventId      String?               @unique
+  occurrenceEvent        TurmaOccurrenceEvent? @relation(fields: [occurrenceEventId], references: [id])
+  valor                  Decimal               @default(50.00) @db.Decimal(10, 2)
+  status                 PendencyStatus        @default(ABERTA)
+  justificativaRecebida  Boolean               @default(false)
+  justificativaDescricao String?
+  abonoAprovadoPor       String?
+  abonoAprovadoEm        DateTime?
+  dataQuitacao           DateTime?
+  canalCobranca          CollectionChannel?
+  statusCobranca         String?
+  observacoes            String?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  @@index([patientId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Auditoria — mecanismo genérico e transversal (project.md §6)
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Importação e diff de CSV do SIGOP (project.md §11)
+// ---------------------------------------------------------------------------
+
+// Cada arquivo do SIGOP é a agenda de UM profissional só — quem importa escolhe
+// o profissional no upload, não é algo lido/confiável a partir das linhas.
+model CsvImport {
+  id                     String       @id @default(cuid())
+  arquivoNome            String
+  professionalId         String
+  professional           Professional @relation(fields: [professionalId], references: [id])
+  importadoEm            DateTime     @default(now())
+  importadoPor           String
+  totalLinhas            Int
+  linhasValidas          Int
+  linhasDescartadas      Int
+  countPacienteNovo      Int          @default(0)
+  countDesmarcacaoFalta  Int          @default(0)
+  countAltaPendente      Int          @default(0)
+  countMudancaEstrutural Int          @default(0)
+  rawFileSnapshot        String       @db.Text
+  observacoes            String?
+
+  rows             CsvImportRow[]
+  diffResults      CsvDiffResult[]
+  occurrenceEvents TurmaOccurrenceEvent[]
+  absenceStreaks   TurmaAbsenceStreak[]
+}
+
+model CsvImportRow {
+  id                  String       @id @default(cuid())
+  csvImportId         String
+  csvImport           CsvImport    @relation(fields: [csvImportId], references: [id])
+  numeroLinha         Int
+  conteudoBruto       Json
+  status              CsvRowStatus
+  motivoDescarte      String?
+  matriculaSigop      String?
+  diaSemana           DiaSemana?
+  horario             String?
+  professionalNomeCru String?
+  statusAtendimento   String?
+
+  @@index([csvImportId])
+}
+
+model CsvDiffResult {
+  id             String             @id @default(cuid())
+  csvImportId    String
+  csvImport      CsvImport          @relation(fields: [csvImportId], references: [id])
+  turmaSlotId    String?
+  turmaSlot      TurmaSlot?         @relation(fields: [turmaSlotId], references: [id])
+  patientId      String?
+  patient        Patient?           @relation(fields: [patientId], references: [id])
+  classification DiffClassification
+  detalhe        Json?
+  resolvido      Boolean            @default(false)
+  resolvidoEm    DateTime?
+  resolvidoPor   String?
+  createdAt      DateTime           @default(now())
+
+  @@index([csvImportId, classification])
+}
+
+// Contador de faltas consecutivas em CSVs, usado para detectar "possível alta
+// pendente" sem recalcular todo o histórico a cada importação.
+model TurmaAbsenceStreak {
+  id               String           @id @default(cuid())
+  patientId        String
+  patient          Patient          @relation(fields: [patientId], references: [id])
+  turmaSlotId      String
+  turmaSlot        TurmaSlot        @relation(fields: [turmaSlotId], references: [id])
+  linkId           String           @unique
+  link             PatientTurmaLink @relation(fields: [linkId], references: [id])
+  missedCount      Int              @default(0)
+  lastSeenImportId String?
+  lastSeenImport   CsvImport?       @relation(fields: [lastSeenImportId], references: [id])
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([patientId, turmaSlotId])
+}
