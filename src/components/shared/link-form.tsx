@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState } from "react";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -56,17 +55,6 @@ export function LinkForm({
             ))}
           </SelectContent>
         </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="dataEntrada">Data de entrada</Label>
-        <Input
-          id="dataEntrada"
-          name="dataEntrada"
-          type="date"
-          defaultValue={new Date().toISOString().slice(0, 10)}
-          required
-        />
       </div>
 
       <div className="space-y-2">

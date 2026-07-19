@@ -27,12 +27,12 @@ export const turmaSlotSchema = z.object({
   tipoAtendimento: z.enum(["INDIVIDUAL", "GRUPO"]),
   modalidade: z.enum(MODALIDADE_VALUES).optional().or(z.literal("")),
   capacidade: z.string().optional().or(z.literal("")),
+  duracaoMinutos: z.string().optional().or(z.literal("")),
 });
 
 export const linkSchema = z.object({
   patientId: z.string().min(1, "Selecione um paciente"),
   turmaSlotId: z.string().min(1),
-  dataEntrada: z.string().min(1, "Data de entrada é obrigatória"),
   observacoes: z.string().optional().or(z.literal("")),
 });
 

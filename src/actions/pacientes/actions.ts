@@ -96,3 +96,32 @@ export async function reactivatePatient(id: string): Promise<void> {
   revalidatePath("/pacientes");
   revalidatePath(`/pacientes/${id}`);
 }
+
+export async function deletePatient(
+  id: string,
+  _prevState: ActionState,
+  _formData: FormData
+): Promise<ActionState> {
+  const [links, altas, waitlistEntries, pendencies, absenceStreaks, csvDiffResults] =
+    await Promise.all([
+      prisma.patientTurmaLink.count({ where: { patientId: id } }),
+      prisma.alta.count({ where: { patientId: id } }),
+      prisma.waitlistEntry.count({ where: { patientId: id } }),
+      prisma.financialPendency.count({ where: { patientId: id } }),
+      prisma.turmaAbsenceStreak.count({ where: { patientId: id } }),
+      prisma.csvDiffResult.count({ where: { patientId: id } }),
+    ]);
+
+  const temHistorico =
+    links > 0 || altas > 0 || waitlistEntries > 0 || pendencies > 0 || absenceStreaks > 0 || csvDiffResults > 0;
+  if (temHistorico) {
+    return {
+      error:
+        "Este paciente tem vínculos, altas, pendências ou outro histórico registrado — não pode ser excluído. Use \"Inativar\" para removê-lo das listas ativas mantendo o histórico.",
+    };
+  }
+
+  await prisma.patient.delete({ where: { id } });
+  revalidatePath("/pacientes");
+  redirect("/pacientes");
+}

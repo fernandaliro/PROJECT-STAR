@@ -27,6 +27,7 @@ export async function createTurmaSlot(
     tipoAtendimento: formData.get("tipoAtendimento"),
     modalidade: formData.get("modalidade") || "",
     capacidade: formData.get("capacidade") || "",
+    duracaoMinutos: formData.get("duracaoMinutos") || "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -38,27 +39,15 @@ export async function createTurmaSlot(
   });
   if (!professional) return { error: "Profissional não encontrado." };
 
-  // Atendimento em grupo só existe em Fisioterapia, e só nas modalidades
-  // Pilates/Fisioterapia/Acupuntura — reforça no servidor o que o formulário
-  // já restringe no cliente.
-  if (data.tipoAtendimento === "GRUPO") {
-    const grupoPermitido =
-      professional.especialidade === "FISIOTERAPIA" &&
-      !!data.modalidade &&
-      MODALIDADES_EM_GRUPO.includes(data.modalidade as never);
-    if (!grupoPermitido) {
-      return {
-        error:
-          "Atendimento em grupo só é permitido em Fisioterapia, nas modalidades Pilates, Fisioterapia ou Acupuntura.",
-      };
-    }
-  }
+  const grupoError = validarGrupoPermitido(professional.especialidade, data.tipoAtendimento, data.modalidade);
+  if (grupoError) return { error: grupoError };
 
   const capacidade = data.capacidade
     ? Number(data.capacidade)
     : data.tipoAtendimento === "INDIVIDUAL"
       ? 1
       : null;
+  const duracaoMinutos = data.duracaoMinutos ? Number(data.duracaoMinutos) : null;
 
   let created;
   try {
@@ -71,6 +60,7 @@ export async function createTurmaSlot(
         modalidade: data.modalidade || undefined,
         especialidade: professional.especialidade,
         capacidade,
+        duracaoMinutos,
       },
     });
   } catch (error) {
@@ -82,6 +72,82 @@ export async function createTurmaSlot(
 
   revalidatePath("/turmas");
   redirect(`/turmas/${created.id}`);
+}
+
+function validarGrupoPermitido(
+  especialidade: string,
+  tipoAtendimento: string,
+  modalidade: string | undefined
+): string | null {
+  if (tipoAtendimento !== "GRUPO") return null;
+  const grupoPermitido =
+    especialidade === "FISIOTERAPIA" &&
+    !!modalidade &&
+    MODALIDADES_EM_GRUPO.includes(modalidade as never);
+  if (!grupoPermitido) {
+    return "Atendimento em grupo só é permitido em Fisioterapia, nas modalidades Pilates, Fisioterapia ou Acupuntura.";
+  }
+  return null;
+}
+
+export async function updateTurmaSlot(
+  id: string,
+  _prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const parsed = turmaSlotSchema.safeParse({
+    diaSemana: formData.get("diaSemana"),
+    horario: formData.get("horario"),
+    professionalId: formData.get("professionalId"),
+    tipoAtendimento: formData.get("tipoAtendimento"),
+    modalidade: formData.get("modalidade") || "",
+    capacidade: formData.get("capacidade") || "",
+    duracaoMinutos: formData.get("duracaoMinutos") || "",
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
+
+  const professional = await prisma.professional.findUnique({
+    where: { id: data.professionalId },
+  });
+  if (!professional) return { error: "Profissional não encontrado." };
+
+  const grupoError = validarGrupoPermitido(professional.especialidade, data.tipoAtendimento, data.modalidade);
+  if (grupoError) return { error: grupoError };
+
+  const capacidade = data.capacidade
+    ? Number(data.capacidade)
+    : data.tipoAtendimento === "INDIVIDUAL"
+      ? 1
+      : null;
+  const duracaoMinutos = data.duracaoMinutos ? Number(data.duracaoMinutos) : null;
+
+  try {
+    await prisma.turmaSlot.update({
+      where: { id },
+      data: {
+        diaSemana: data.diaSemana,
+        horario: data.horario,
+        professionalId: data.professionalId,
+        tipoAtendimento: data.tipoAtendimento,
+        modalidade: data.modalidade || null,
+        especialidade: professional.especialidade,
+        capacidade,
+        duracaoMinutos,
+      },
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return { error: "Já existe uma turma com esse dia, horário, profissional e tipo de atendimento." };
+    }
+    throw error;
+  }
+
+  revalidatePath("/turmas");
+  revalidatePath(`/turmas/${id}`);
+  redirect(`/turmas/${id}`);
 }
 
 export async function deactivateTurmaSlot(id: string): Promise<void> {
@@ -97,7 +163,6 @@ export async function createLink(
   const parsed = linkSchema.safeParse({
     patientId: formData.get("patientId"),
     turmaSlotId: formData.get("turmaSlotId"),
-    dataEntrada: formData.get("dataEntrada"),
     observacoes: formData.get("observacoes") || "",
   });
   if (!parsed.success) {
@@ -121,7 +186,7 @@ export async function createLink(
       data: {
         patientId: data.patientId,
         turmaSlotId: data.turmaSlotId,
-        dataEntrada: toDateOnly(data.dataEntrada),
+        dataEntrada: toDateOnly(new Date()),
         observacoes: data.observacoes || null,
       },
     });
@@ -184,6 +249,109 @@ export async function registrarAlta(
   redirect(`/turmas/${turmaSlotId}`);
 }
 
+// Checkbox manual "já bati esse paciente/dia com o SIGOP" — independente do
+// status de presença. Cria o evento do dia como CONFIRMADO se ainda não
+// existir (mesma regra implícita usada na leitura: sem evento = confirmado).
+export async function toggleConferidoSigop(
+  linkId: string,
+  data: string
+): Promise<void> {
+  const actor = getCurrentUser();
+  const link = await prisma.patientTurmaLink.findUnique({ where: { id: linkId } });
+  if (!link) return;
+
+  const dataOnly = toDateOnly(data);
+  const existing = await prisma.turmaOccurrenceEvent.findUnique({
+    where: { linkId_data: { linkId, data: dataOnly } },
+  });
+
+  if (existing) {
+    await prisma.turmaOccurrenceEvent.update({
+      where: { id: existing.id },
+      data: { conferidoSigop: !existing.conferidoSigop },
+    });
+  } else {
+    await prisma.turmaOccurrenceEvent.create({
+      data: {
+        linkId,
+        turmaSlotId: link.turmaSlotId,
+        data: dataOnly,
+        status: "CONFIRMADO",
+        conferidoSigop: true,
+        registradoPor: actor,
+      },
+    });
+  }
+
+  revalidatePath("/agenda");
+  revalidatePath(`/turmas/${link.turmaSlotId}`);
+}
+
+type OcorrenciaStatus = "CONFIRMADO" | "DESMARCADO" | "FALTA_JUSTIFICADA" | "FALTA_INJUSTIFICADA";
+
+async function upsertOcorrencia(
+  linkId: string,
+  dataOnly: Date,
+  status: OcorrenciaStatus,
+  motivo: string | null,
+  actor: string
+): Promise<{ turmaSlotId: string }> {
+  const link = await prisma.patientTurmaLink.findUnique({ where: { id: linkId } });
+  if (!link) throw new Error("Vínculo não encontrado.");
+
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.turmaOccurrenceEvent.findUnique({
+      where: { linkId_data: { linkId: link.id, data: dataOnly } },
+    });
+
+    const event = existing
+      ? await tx.turmaOccurrenceEvent.update({
+          where: { id: existing.id },
+          data: { status, motivo: motivo || null, registradoPor: actor },
+        })
+      : await tx.turmaOccurrenceEvent.create({
+          data: {
+            linkId: link.id,
+            turmaSlotId: link.turmaSlotId,
+            data: dataOnly,
+            status,
+            motivo: motivo || null,
+            registradoPor: actor,
+          },
+        });
+
+    // Regra financeira (project.md §5.5, conforme protótipo validado): não é
+    // cálculo automático de antecedência — só FALTA_INJUSTIFICADA gera multa.
+    // Se o status for corrigido para outra coisa depois, a multa (se ainda
+    // aberta) é marcada como cancelada — nunca apagada, só deixa de valer.
+    const existingPendency = existing
+      ? await tx.financialPendency.findUnique({ where: { occurrenceEventId: existing.id } })
+      : null;
+
+    if (status === "FALTA_INJUSTIFICADA" && !existingPendency) {
+      await tx.financialPendency.create({
+        data: {
+          patientId: link.patientId,
+          origem: "FALTA_INJUSTIFICADA",
+          occurrenceEventId: event.id,
+          valor: VALOR_MULTA_PADRAO,
+        },
+      });
+    } else if (
+      status !== "FALTA_INJUSTIFICADA" &&
+      existingPendency &&
+      existingPendency.status === "ABERTA"
+    ) {
+      await tx.financialPendency.update({
+        where: { id: existingPendency.id },
+        data: { status: "CANCELADA" },
+      });
+    }
+  });
+
+  return { turmaSlotId: link.turmaSlotId };
+}
+
 export async function registrarOcorrencia(
   _prevState: ActionState,
   formData: FormData
@@ -198,72 +366,39 @@ export async function registrarOcorrencia(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
   const input = parsed.data;
-  const actor = getCurrentUser();
-
-  const link = await prisma.patientTurmaLink.findUnique({
-    where: { id: input.linkId },
-    include: { turmaSlot: true },
-  });
-  if (!link) return { error: "Vínculo não encontrado." };
 
   if (input.status === "DESMARCADO" && !input.motivo) {
     return { error: "Desmarcação exige um motivo." };
   }
 
-  const dataOnly = toDateOnly(input.data);
-  const turmaSlotId = link.turmaSlotId;
-
-  await prisma.$transaction(async (tx) => {
-    const existing = await tx.turmaOccurrenceEvent.findUnique({
-      where: { linkId_data: { linkId: link.id, data: dataOnly } },
-    });
-
-    const event = existing
-      ? await tx.turmaOccurrenceEvent.update({
-          where: { id: existing.id },
-          data: { status: input.status, motivo: input.motivo || null, registradoPor: actor },
-        })
-      : await tx.turmaOccurrenceEvent.create({
-          data: {
-            linkId: link.id,
-            turmaSlotId: link.turmaSlotId,
-            data: dataOnly,
-            status: input.status,
-            motivo: input.motivo || null,
-            registradoPor: actor,
-          },
-        });
-
-    // Regra financeira (project.md §5.5, conforme protótipo validado): não é
-    // cálculo automático de antecedência — só FALTA_INJUSTIFICADA gera multa.
-    // Se o status for corrigido para outra coisa depois, a multa (se ainda
-    // aberta) é marcada como cancelada — nunca apagada, só deixa de valer.
-    const existingPendency = existing
-      ? await tx.financialPendency.findUnique({ where: { occurrenceEventId: existing.id } })
-      : null;
-
-    if (input.status === "FALTA_INJUSTIFICADA" && !existingPendency) {
-      await tx.financialPendency.create({
-        data: {
-          patientId: link.patientId,
-          origem: "FALTA_INJUSTIFICADA",
-          occurrenceEventId: event.id,
-          valor: VALOR_MULTA_PADRAO,
-        },
-      });
-    } else if (
-      input.status !== "FALTA_INJUSTIFICADA" &&
-      existingPendency &&
-      existingPendency.status === "ABERTA"
-    ) {
-      await tx.financialPendency.update({
-        where: { id: existingPendency.id },
-        data: { status: "CANCELADA" },
-      });
-    }
-  });
+  const actor = getCurrentUser();
+  let turmaSlotId: string;
+  try {
+    ({ turmaSlotId } = await upsertOcorrencia(
+      input.linkId,
+      toDateOnly(input.data),
+      input.status,
+      input.motivo || null,
+      actor
+    ));
+  } catch {
+    return { error: "Vínculo não encontrado." };
+  }
 
   revalidatePath(`/turmas/${turmaSlotId}`);
   revalidatePath("/agenda");
   redirect(`/turmas/${turmaSlotId}`);
+}
+
+// Variante sem redirect, usada no dropdown inline da visão "Dia" da agenda —
+// o usuário permanece na mesma tela ao trocar o status de um paciente.
+export async function setOcorrenciaStatusInline(
+  linkId: string,
+  data: string,
+  status: OcorrenciaStatus
+): Promise<void> {
+  const actor = getCurrentUser();
+  const { turmaSlotId } = await upsertOcorrencia(linkId, toDateOnly(data), status, null, actor);
+  revalidatePath("/agenda");
+  revalidatePath(`/turmas/${turmaSlotId}`);
 }

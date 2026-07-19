@@ -46,10 +46,15 @@ export default async function TurmaDetailPage(
             {turmaSlot.professional.nome} ·{" "}
             {turmaSlot.tipoAtendimento === "GRUPO" ? "Grupo" : "Individual"}
             {turmaSlot.modalidade ? ` · ${turmaSlot.modalidade}` : ""}
+            {turmaSlot.duracaoMinutos ? ` · ${turmaSlot.duracaoMinutos}min` : ""}
+            {turmaSlot.capacidade ? ` · ${activeLinks.length}/${turmaSlot.capacidade} ocupados` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <CopyButton text={nome} label="Copiar nome" />
+          <Button variant="outline" nativeButton={false} render={<Link href={`/turmas/${id}/editar`} />}>
+            Editar turma
+          </Button>
           {turmaSlot.ativo ? (
             <form action={deactivateTurmaSlot.bind(null, id)}>
               <Button variant="outline" type="submit">

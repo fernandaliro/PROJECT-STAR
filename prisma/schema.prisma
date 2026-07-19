@@ -204,6 +204,9 @@ model TurmaSlot {
   // grupo sem teto definido). Usado pela sugestão automática da fila de espera
   // para saber se há "vaga livre" (project.md §10).
   capacidade      Int?
+  // Duração do atendimento em minutos (fisioterapia costuma variar entre 30 e
+  // 60min). Opcional — nem toda especialidade precisa informar.
+  duracaoMinutos  Int?
   ativo           Boolean          @default(true)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -269,6 +272,9 @@ model TurmaOccurrenceEvent {
   data           DateTime
   status         OccurrenceStatus
   motivo         String?
+  // Marcação manual e independente do status: "já bati esse paciente/dia com
+  // o SIGOP". Não afeta presença/falta nem pendência financeira.
+  conferidoSigop Boolean          @default(false)
   registradoPor  String?
   origemImportId String?
   csvImport      CsvImport?       @relation(fields: [origemImportId], references: [id])

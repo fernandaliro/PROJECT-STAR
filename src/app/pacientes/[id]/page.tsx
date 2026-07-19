@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { deactivatePatient, reactivatePatient } from "@/actions/pacientes/actions";
+import { DeletePatientButton } from "@/components/shared/delete-patient-button";
 import { DIA_SEMANA_LABEL } from "@/lib/constants";
 
 export default async function PacienteDetailPage(
@@ -51,6 +52,7 @@ export default async function PacienteDetailPage(
               </Button>
             </form>
           )}
+          <DeletePatientButton id={id} />
         </div>
       </div>
 

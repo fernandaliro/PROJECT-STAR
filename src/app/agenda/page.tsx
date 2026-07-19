@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { computeTurmaNamesForSlots, getAttendanceListsForDate } from "@/lib/turma-name";
+import { computeTurmaNamesForSlots, getDayRosterForSlots } from "@/lib/turma-name";
 import {
   addDays,
   diaSemanaFromDate,
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/shared/copy-button";
 import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
+import { DayRosterRow } from "@/components/shared/day-roster-row";
 
 type View = "dia" | "semana" | "mes";
 
@@ -131,43 +132,79 @@ async function DayView({
   slots,
 }: {
   date: Date;
-  slots: { id: string; horario: string; professional: { nome: string } }[];
+  slots: {
+    id: string;
+    horario: string;
+    professional: { nome: string };
+    tipoAtendimento: string;
+    modalidade: string | null;
+    capacidade: number | null;
+  }[];
 }) {
   const slotIds = slots.map((slot) => slot.id);
-  const [namesMap, atendimentoMap] = await Promise.all([
+  const dateParam = formatDateOnly(date);
+  const [namesMap, rosterMap] = await Promise.all([
     computeTurmaNamesForSlots(slotIds),
-    getAttendanceListsForDate(slotIds, date),
+    getDayRosterForSlots(slotIds, date),
   ]);
   const items = slots.map((slot) => ({
     slot,
     nome: namesMap.get(slot.id)!,
-    atendimento: atendimentoMap.get(slot.id) ?? [],
+    roster: rosterMap.get(slot.id) ?? [],
   }));
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {items.length === 0 && (
         <p className="text-sm text-muted-foreground">
           Nenhuma turma neste dia.
         </p>
       )}
-      {items.map(({ slot, nome, atendimento }) => (
-        <div key={slot.id} className="rounded-md border p-3 text-sm">
-          <div className="flex items-center justify-between">
-            <Link href={`/turmas/${slot.id}`} className="font-medium hover:underline">
-              {slot.horario} — {slot.professional.nome}
-            </Link>
-            <CopyButton
-              text={atendimento.join(", ")}
-              label="Copiar lista do dia"
-            />
+      {items.map(({ slot, nome, roster }) => {
+        const ocupados = roster.filter((entry) => entry.status === "CONFIRMADO").length;
+        return (
+          <div key={slot.id} className="rounded-md border text-sm">
+            <div className="flex items-center justify-between gap-2 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs font-medium">{slot.horario}</span>
+                <Link href={`/turmas/${slot.id}`} className="font-medium hover:underline">
+                  {slot.professional.nome}
+                </Link>
+                <Badge variant="outline">
+                  {slot.tipoAtendimento === "GRUPO" ? "Grupo" : "Individual"}
+                </Badge>
+                {slot.modalidade && <Badge variant="outline">{slot.modalidade}</Badge>}
+              </div>
+              <div className="flex items-center gap-2">
+                {slot.capacidade && (
+                  <span className="text-xs text-muted-foreground">
+                    {ocupados}/{slot.capacidade} ocupados
+                  </span>
+                )}
+                <CopyButton
+                  text={roster
+                    .filter((entry) => entry.status === "CONFIRMADO")
+                    .map((entry) => entry.patientName)
+                    .join(", ")}
+                  label="Copiar nomes pro SIGOP"
+                />
+              </div>
+            </div>
+            <p className="px-3 pb-2 text-xs text-muted-foreground">{nome}</p>
+            {roster.length === 0 ? (
+              <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                Nenhum paciente com vínculo ativo nesta turma.
+              </p>
+            ) : (
+              <div className="px-3">
+                {roster.map((entry) => (
+                  <DayRosterRow key={entry.linkId} entry={entry} date={dateParam} />
+                ))}
+              </div>
+            )}
           </div>
-          <p className="mt-1 text-muted-foreground">{nome}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Presentes hoje: {atendimento.length > 0 ? atendimento.join(", ") : "—"}
-          </p>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

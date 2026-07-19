@@ -27,20 +27,38 @@ const MODALIDADE_LABEL: Record<string, string> = {
 
 type Professional = { id: string; nome: string; especialidade: string };
 
+type InitialValues = {
+  diaSemana: string;
+  horario: string;
+  professionalId: string;
+  tipoAtendimento: string;
+  modalidade: string | null;
+  capacidade: number | null;
+  duracaoMinutos: number | null;
+};
+
 export function TurmaSlotForm({
   action,
   professionals,
+  initial,
+  submitLabel = "Criar turma",
 }: {
   action: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
   professionals: Professional[];
+  initial?: InitialValues;
+  submitLabel?: string;
 }) {
   const [state, formAction] = useActionState<ActionState, FormData>(
     action,
     undefined
   );
-  const [professionalId, setProfessionalId] = useState<string>("");
-  const [modalidade, setModalidade] = useState<string>("");
-  const [tipoAtendimento, setTipoAtendimento] = useState<string>("INDIVIDUAL");
+  const [professionalId, setProfessionalId] = useState<string>(
+    initial?.professionalId ?? ""
+  );
+  const [modalidade, setModalidade] = useState<string>(initial?.modalidade ?? "");
+  const [tipoAtendimento, setTipoAtendimento] = useState<string>(
+    initial?.tipoAtendimento ?? "INDIVIDUAL"
+  );
 
   const professional = professionals.find((p) => p.id === professionalId);
   const isFisioterapia = professional?.especialidade === "FISIOTERAPIA";
@@ -86,7 +104,7 @@ export function TurmaSlotForm({
 
       <div className="space-y-2">
         <Label htmlFor="diaSemana">Dia da semana</Label>
-        <Select name="diaSemana" items={DIA_SEMANA_LABEL}>
+        <Select name="diaSemana" items={DIA_SEMANA_LABEL} defaultValue={initial?.diaSemana}>
           <SelectTrigger id="diaSemana" className="w-full">
             <SelectValue placeholder="Selecione..." />
           </SelectTrigger>
@@ -102,7 +120,25 @@ export function TurmaSlotForm({
 
       <div className="space-y-2">
         <Label htmlFor="horario">Horário</Label>
-        <Input id="horario" name="horario" type="time" required />
+        <Input id="horario" name="horario" type="time" defaultValue={initial?.horario} required />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="duracaoMinutos">Duração (minutos, opcional)</Label>
+        <Input
+          id="duracaoMinutos"
+          name="duracaoMinutos"
+          type="number"
+          min="5"
+          step="5"
+          placeholder="Ex: 30 ou 60"
+          defaultValue={initial?.duracaoMinutos ?? undefined}
+        />
+        {isFisioterapia && (
+          <p className="text-xs text-muted-foreground">
+            Tratamentos de fisioterapia costumam durar entre 30 e 60 minutos.
+          </p>
+        )}
       </div>
 
       {isFisioterapia && (
@@ -131,6 +167,10 @@ export function TurmaSlotForm({
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            Urgência e Encaixe também são modalidades — usadas para marcar o tipo do
+            atendimento individual, não só Pilates/Fisioterapia/Acupuntura.
+          </p>
         </div>
       )}
 
@@ -160,7 +200,14 @@ export function TurmaSlotForm({
 
       <div className="space-y-2">
         <Label htmlFor="capacidade">Capacidade (vagas, opcional)</Label>
-        <Input id="capacidade" name="capacidade" type="number" min="1" placeholder="Sem limite" />
+        <Input
+          id="capacidade"
+          name="capacidade"
+          type="number"
+          min="1"
+          placeholder="Sem limite"
+          defaultValue={initial?.capacidade ?? undefined}
+        />
         <p className="text-xs text-muted-foreground">
           Individual assume 1 vaga automaticamente se deixado em branco.
         </p>
@@ -168,7 +215,7 @@ export function TurmaSlotForm({
 
       {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
 
-      <SubmitButton>Criar turma</SubmitButton>
+      <SubmitButton>{submitLabel}</SubmitButton>
     </form>
   );
 }
