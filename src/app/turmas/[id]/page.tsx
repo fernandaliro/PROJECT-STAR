@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CopyButton } from "@/components/shared/copy-button";
+import { DeleteTurmaButton } from "@/components/shared/delete-turma-button";
 import { deactivateTurmaSlot } from "@/actions/turmas/actions";
 
 export default async function TurmaDetailPage(
@@ -64,6 +65,7 @@ export default async function TurmaDetailPage(
           ) : (
             <Badge variant="secondary">Inativa</Badge>
           )}
+          <DeleteTurmaButton id={id} />
         </div>
       </div>
 

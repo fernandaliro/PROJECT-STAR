@@ -62,15 +62,17 @@ export function TurmaSlotForm({
 
   const professional = professionals.find((p) => p.id === professionalId);
   const isFisioterapia = professional?.especialidade === "FISIOTERAPIA";
-  const grupoPermitido =
-    isFisioterapia && MODALIDADES_EM_GRUPO.includes(modalidade as never);
+  // Grupo é uma opção sempre visível para Fisioterapia (a validação de qual
+  // modalidade permite grupo acontece no servidor e com um aviso aqui) — só
+  // fica de fato indisponível para outras especialidades.
+  const modalidadeCombinaComGrupo = MODALIDADES_EM_GRUPO.includes(modalidade as never);
 
   const tipoAtendimentoItems = useMemo(
     () =>
-      grupoPermitido
+      isFisioterapia
         ? { GRUPO: "Grupo", INDIVIDUAL: "Individual" }
         : { INDIVIDUAL: "Individual" },
-    [grupoPermitido]
+    [isFisioterapia]
   );
 
   return (
@@ -148,13 +150,7 @@ export function TurmaSlotForm({
             name="modalidade"
             items={MODALIDADE_LABEL}
             value={modalidade}
-            onValueChange={(v) => {
-              const next = v as string;
-              setModalidade(next);
-              if (!MODALIDADES_EM_GRUPO.includes(next as never)) {
-                setTipoAtendimento("INDIVIDUAL");
-              }
-            }}
+            onValueChange={(v) => setModalidade(v as string)}
           >
             <SelectTrigger id="modalidade" className="w-full">
               <SelectValue placeholder="Selecione..." />
@@ -177,7 +173,7 @@ export function TurmaSlotForm({
       <div className="space-y-2">
         <Label htmlFor="tipoAtendimento">Tipo de atendimento</Label>
         <Select
-          key={grupoPermitido ? "com-grupo" : "so-individual"}
+          key={isFisioterapia ? "com-grupo" : "so-individual"}
           name="tipoAtendimento"
           items={tipoAtendimentoItems}
           value={tipoAtendimento}
@@ -187,13 +183,18 @@ export function TurmaSlotForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {grupoPermitido && <SelectItem value="GRUPO">Grupo</SelectItem>}
+            {isFisioterapia && <SelectItem value="GRUPO">Grupo</SelectItem>}
             <SelectItem value="INDIVIDUAL">Individual</SelectItem>
           </SelectContent>
         </Select>
-        {!grupoPermitido && (
+        {!isFisioterapia && (
           <p className="text-xs text-muted-foreground">
             Atendimento em grupo só existe em Fisioterapia (Pilates, Fisioterapia ou Acupuntura).
+          </p>
+        )}
+        {isFisioterapia && tipoAtendimento === "GRUPO" && !modalidadeCombinaComGrupo && (
+          <p className="text-xs text-destructive">
+            Para salvar como Grupo, a modalidade precisa ser Pilates, Fisioterapia ou Acupuntura.
           </p>
         )}
       </div>

@@ -156,6 +156,40 @@ export async function deactivateTurmaSlot(id: string): Promise<void> {
   revalidatePath(`/turmas/${id}`);
 }
 
+export async function deleteTurmaSlot(
+  id: string,
+  _prevState: ActionState,
+  _formData: FormData
+): Promise<ActionState> {
+  const [links, altas, occurrenceEvents, csvDiffResults, absenceStreaks, waitlistSuggestions] =
+    await Promise.all([
+      prisma.patientTurmaLink.count({ where: { turmaSlotId: id } }),
+      prisma.alta.count({ where: { turmaSlotId: id } }),
+      prisma.turmaOccurrenceEvent.count({ where: { turmaSlotId: id } }),
+      prisma.csvDiffResult.count({ where: { turmaSlotId: id } }),
+      prisma.turmaAbsenceStreak.count({ where: { turmaSlotId: id } }),
+      prisma.waitlistSuggestion.count({ where: { turmaSlotId: id } }),
+    ]);
+
+  const temHistorico =
+    links > 0 ||
+    altas > 0 ||
+    occurrenceEvents > 0 ||
+    csvDiffResults > 0 ||
+    absenceStreaks > 0 ||
+    waitlistSuggestions > 0;
+  if (temHistorico) {
+    return {
+      error:
+        "Esta turma tem pacientes vinculados, altas, ocorrências ou outro histórico registrado — não pode ser excluída. Use \"Desativar turma\" para removê-la das listas ativas mantendo o histórico.",
+    };
+  }
+
+  await prisma.turmaSlot.delete({ where: { id } });
+  revalidatePath("/turmas");
+  redirect("/turmas");
+}
+
 export async function createLink(
   _prevState: ActionState,
   formData: FormData
