@@ -1,6 +1,12 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { computeTurmaNamesForSlots, getDayRosterForSlots } from "@/lib/turma-name";
+import {
+  computeTurmaNamesForSlots,
+  getDayRosterForSlots,
+  getMonthAttendanceCounts,
+  type DayRosterEntry,
+} from "@/lib/turma-name";
 import {
   addDays,
   diaSemanaFromDate,
@@ -112,17 +118,8 @@ export default async function AgendaPage(props: PageProps<"/agenda">) {
       {view === "dia" && (
         <DayView date={date} slots={byDia.get(diaSemanaFromDate(date)) ?? []} />
       )}
-      {view === "semana" && (
-        <WeekView date={date} byDia={byDia} dateParam={dateParam} />
-      )}
-      {view === "mes" && (
-        <MonthView
-          date={date}
-          countsByDia={Object.fromEntries(
-            DIA_SEMANA_ORDER.map((dia) => [dia, (byDia.get(dia) ?? []).length])
-          )}
-        />
-      )}
+      {view === "semana" && <GradeSemanal date={date} byDia={byDia} dateParam={dateParam} />}
+      {view === "mes" && <MonthView date={date} turmaSlots={turmaSlots} />}
     </div>
   );
 }
@@ -209,69 +206,140 @@ async function DayView({
   );
 }
 
-function WeekView({
+type GradeSlot = {
+  id: string;
+  horario: string;
+  professional: { nome: string };
+  tipoAtendimento: string;
+  modalidade: string | null;
+  capacidade: number | null;
+  duracaoMinutos: number | null;
+};
+
+// Grade semanal: linhas = horários distintos que aparecem na semana, colunas =
+// dias. Cada célula mostra as turmas daquele dia+horário com ocupação e
+// quantos ainda estão "a conferir" no SIGOP — mesma lógica da visão Dia, só
+// que cruzada. Uma consulta de roster por dia com turma (não por célula).
+async function GradeSemanal({
   date,
   byDia,
   dateParam,
 }: {
   date: Date;
-  byDia: Map<
-    string,
-    { id: string; horario: string; professional: { nome: string } }[]
-  >;
+  byDia: Map<string, GradeSlot[]>;
   dateParam: string;
 }) {
   const monday = startOfWeek(date);
   const days = DIA_SEMANA_ORDER.map((_, i) => addDays(monday, i));
 
+  const rosterEntries = await Promise.all(
+    DIA_SEMANA_ORDER.map(async (dia, i) => {
+      const slots = byDia.get(dia) ?? [];
+      if (slots.length === 0) return [] as [string, DayRosterEntry[]][];
+      const roster = await getDayRosterForSlots(
+        slots.map((s) => s.id),
+        days[i]
+      );
+      return Array.from(roster.entries());
+    })
+  );
+  const rosterMap = new Map(rosterEntries.flat());
+
+  const horarios = Array.from(
+    new Set(Array.from(byDia.values()).flatMap((slots) => slots.map((s) => s.horario)))
+  ).sort();
+
+  if (horarios.length === 0) {
+    return <p className="text-sm text-muted-foreground">Nenhuma turma cadastrada.</p>;
+  }
+
   return (
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
-      {days.map((day, index) => {
-        const dia = DIA_SEMANA_ORDER[index];
-        const slots = byDia.get(dia) ?? [];
-        const isSelected = formatDateOnly(day) === dateParam;
-        return (
-          <div
-            key={dia}
-            className={`rounded-md border p-2 text-sm ${isSelected ? "border-primary" : ""}`}
-          >
+    <div className="overflow-x-auto">
+      <div
+        className="grid gap-px rounded-md border bg-border text-xs"
+        style={{ gridTemplateColumns: `72px repeat(7, minmax(140px, 1fr))` }}
+      >
+        <div className="bg-muted p-2" />
+        {days.map((day, index) => {
+          const dia = DIA_SEMANA_ORDER[index];
+          const isSelected = formatDateOnly(day) === dateParam;
+          return (
             <Link
+              key={dia}
               href={buildHref("dia", formatDateOnly(day))}
-              className="font-medium hover:underline"
+              className={`bg-muted p-2 text-center font-medium hover:bg-accent ${isSelected ? "text-primary" : ""}`}
             >
-              {DIA_SEMANA_LABEL[dia]} {day.getUTCDate()}
+              {DIA_SEMANA_LABEL[dia].slice(0, 3)} {day.getUTCDate()}
             </Link>
-            <ul className="mt-2 space-y-1">
-              {slots.map((slot) => (
-                <li key={slot.id}>
-                  <Link href={`/turmas/${slot.id}`} className="text-muted-foreground hover:underline">
-                    {slot.horario} {slot.professional.nome}
-                  </Link>
-                </li>
-              ))}
-              {slots.length === 0 && (
-                <li className="text-muted-foreground">—</li>
-              )}
-            </ul>
-          </div>
-        );
-      })}
+          );
+        })}
+
+        {horarios.map((horario) => (
+          <Fragment key={horario}>
+            <div className="flex items-center justify-center bg-muted p-2 font-mono font-medium">
+              {horario}
+            </div>
+            {days.map((day, index) => {
+              const dia = DIA_SEMANA_ORDER[index];
+              const slots = (byDia.get(dia) ?? []).filter((s) => s.horario === horario);
+              return (
+                <div key={`${horario}-${dia}`} className="space-y-1 bg-background p-1">
+                  {slots.map((slot) => {
+                    const roster = rosterMap.get(slot.id) ?? [];
+                    const ocupados = roster.filter((e) => e.status === "CONFIRMADO").length;
+                    const aConferir = roster.filter(
+                      (e) => e.status !== "DESMARCADO" && !e.conferidoSigop
+                    ).length;
+                    return (
+                      <Link
+                        key={slot.id}
+                        href={buildHref("dia", formatDateOnly(day))}
+                        className="block rounded-sm border bg-card p-1.5 hover:border-primary"
+                      >
+                        <div className="font-medium">{slot.professional.nome}</div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-muted-foreground">
+                          <span>{slot.tipoAtendimento === "GRUPO" ? "Grupo" : "Individual"}</span>
+                          {slot.modalidade && <span>· {slot.modalidade}</span>}
+                          {slot.duracaoMinutos && <span>· {slot.duracaoMinutos}min</span>}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2">
+                          {slot.capacidade && (
+                            <span className="text-muted-foreground">
+                              {ocupados}/{slot.capacidade}
+                            </span>
+                          )}
+                          {aConferir > 0 && (
+                            <span className="text-destructive">{aConferir} a conferir</span>
+                          )}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </Fragment>
+        ))}
+      </div>
     </div>
   );
 }
 
-function MonthView({
+async function MonthView({
   date,
-  countsByDia,
+  turmaSlots,
 }: {
   date: Date;
-  countsByDia: Record<string, number>;
+  turmaSlots: { id: string; diaSemana: string }[];
 }) {
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth();
   const firstOfMonth = new Date(Date.UTC(year, month, 1));
   const gridStart = startOfWeek(firstOfMonth);
+  const gridEndExclusive = addDays(gridStart, 42);
   const cells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+  const counts = await getMonthAttendanceCounts(turmaSlots, gridStart, gridEndExclusive);
+  const todayStr = formatDateOnly(new Date());
 
   return (
     <div className="grid grid-cols-7 gap-1 text-xs">
@@ -281,19 +349,19 @@ function MonthView({
         </div>
       ))}
       {cells.map((cell) => {
-        const dia = diaSemanaFromDate(cell);
-        const count = countsByDia[dia] ?? 0;
+        const dateStr = formatDateOnly(cell);
+        const count = counts.get(dateStr) ?? 0;
         const inMonth = cell.getUTCMonth() === month;
         return (
           <Link
-            key={formatDateOnly(cell)}
-            href={buildHref("dia", formatDateOnly(cell))}
-            className={`rounded-md border p-2 hover:bg-accent ${inMonth ? "" : "opacity-40"}`}
+            key={dateStr}
+            href={buildHref("dia", dateStr)}
+            className={`rounded-md border p-2 hover:bg-accent ${inMonth ? "" : "opacity-40"} ${dateStr === todayStr ? "border-primary" : ""}`}
           >
             <div>{cell.getUTCDate()}</div>
             {count > 0 && (
               <Badge variant="outline" className="mt-1">
-                {count} turma{count > 1 ? "s" : ""}
+                {count} atend.
               </Badge>
             )}
           </Link>

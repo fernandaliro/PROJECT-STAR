@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { toDateOnly } from "@/lib/dates";
+import { toDateOnly, formatDateOnly, diaSemanaFromDate, addDays } from "@/lib/dates";
 
 // Nome da turma nunca é persistido — sempre computado a partir dos vínculos
 // ativos, ordenados por data de entrada (project.md §7, §11). Versão em lote
@@ -116,6 +116,64 @@ export async function getDayRosterForSlots(
       motivo: event?.motivo ?? null,
       conferidoSigop: event?.conferidoSigop ?? false,
     });
+  }
+  return result;
+}
+
+// Quantos atendimentos (vínculos ativos menos quem desmarcou/faltou naquele
+// dia específico) cada dia do intervalo [gridStart, gridEndExclusive) tem —
+// usado na visão Mensal. Duas consultas só (nunca uma por dia/turma):
+// contagem de vínculos ativos por turma + eventos não-confirmados no
+// intervalo, o resto é aritmética em memória.
+export async function getMonthAttendanceCounts(
+  turmaSlots: { id: string; diaSemana: string }[],
+  gridStart: Date,
+  gridEndExclusive: Date
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (turmaSlots.length === 0) return result;
+  const turmaSlotIds = turmaSlots.map((s) => s.id);
+
+  const [linkCounts, nonConfirmedCounts] = await Promise.all([
+    prisma.patientTurmaLink.groupBy({
+      by: ["turmaSlotId"],
+      where: { turmaSlotId: { in: turmaSlotIds }, status: "ATIVO" },
+      _count: true,
+    }),
+    prisma.turmaOccurrenceEvent.groupBy({
+      by: ["turmaSlotId", "data"],
+      where: {
+        turmaSlotId: { in: turmaSlotIds },
+        status: { not: "CONFIRMADO" },
+        data: { gte: gridStart, lt: gridEndExclusive },
+      },
+      _count: true,
+    }),
+  ]);
+
+  const baseCountByTurma = new Map(linkCounts.map((row) => [row.turmaSlotId, row._count]));
+  const nonConfirmedByTurmaDate = new Map(
+    nonConfirmedCounts.map((row) => [`${row.turmaSlotId}|${formatDateOnly(row.data)}`, row._count])
+  );
+
+  const byDia = new Map<string, string[]>();
+  for (const slot of turmaSlots) {
+    const list = byDia.get(slot.diaSemana) ?? [];
+    list.push(slot.id);
+    byDia.set(slot.diaSemana, list);
+  }
+
+  for (let cursor = gridStart; cursor < gridEndExclusive; cursor = addDays(cursor, 1)) {
+    const dateStr = formatDateOnly(cursor);
+    const dia = diaSemanaFromDate(cursor);
+    const idsForDia = byDia.get(dia) ?? [];
+    let total = 0;
+    for (const id of idsForDia) {
+      const base = baseCountByTurma.get(id) ?? 0;
+      const naoConfirmados = nonConfirmedByTurmaDate.get(`${id}|${dateStr}`) ?? 0;
+      total += Math.max(0, base - naoConfirmados);
+    }
+    result.set(dateStr, total);
   }
   return result;
 }
