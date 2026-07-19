@@ -26,6 +26,7 @@ const MODALIDADE_LABEL: Record<string, string> = {
 };
 
 type Professional = { id: string; nome: string; especialidade: string };
+type Patient = { id: string; nomeCompleto: string; matriculaSigop: string };
 
 type InitialValues = {
   diaSemana: string;
@@ -42,11 +43,15 @@ export function TurmaSlotForm({
   professionals,
   initial,
   submitLabel = "Criar turma",
+  diaSemanaMode = "single",
+  patients,
 }: {
   action: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
   professionals: Professional[];
   initial?: InitialValues;
   submitLabel?: string;
+  diaSemanaMode?: "single" | "multi";
+  patients?: Patient[];
 }) {
   const [state, formAction] = useActionState<ActionState, FormData>(
     action,
@@ -59,6 +64,11 @@ export function TurmaSlotForm({
   const [tipoAtendimento, setTipoAtendimento] = useState<string>(
     initial?.tipoAtendimento ?? "INDIVIDUAL"
   );
+  const [diasSelecionados, setDiasSelecionados] = useState<Set<string>>(
+    new Set(initial?.diaSemana ? [initial.diaSemana] : [])
+  );
+  const [patientSearch, setPatientSearch] = useState("");
+  const [patientIds, setPatientIds] = useState<Set<string>>(new Set());
 
   const professional = professionals.find((p) => p.id === professionalId);
   const isFisioterapia = professional?.especialidade === "FISIOTERAPIA";
@@ -74,6 +84,13 @@ export function TurmaSlotForm({
         : { INDIVIDUAL: "Individual" },
     [isFisioterapia]
   );
+
+  const filteredPatients = useMemo(() => {
+    if (!patients) return [];
+    const q = patientSearch.trim().toLowerCase();
+    if (!q) return patients;
+    return patients.filter((p) => p.nomeCompleto.toLowerCase().includes(q));
+  }, [patients, patientSearch]);
 
   return (
     <form action={formAction} className="max-w-lg space-y-4">
@@ -104,21 +121,63 @@ export function TurmaSlotForm({
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="diaSemana">Dia da semana</Label>
-        <Select name="diaSemana" items={DIA_SEMANA_LABEL} defaultValue={initial?.diaSemana}>
-          <SelectTrigger id="diaSemana" className="w-full">
-            <SelectValue placeholder="Selecione..." />
-          </SelectTrigger>
-          <SelectContent>
-            {DIA_SEMANA_ORDER.map((dia) => (
-              <SelectItem key={dia} value={dia}>
-                {DIA_SEMANA_LABEL[dia]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {diaSemanaMode === "multi" ? (
+        <div className="space-y-2">
+          <Label>Dias da semana</Label>
+          <div className="flex flex-wrap gap-2">
+            {DIA_SEMANA_ORDER.map((dia) => {
+              const checked = diasSelecionados.has(dia);
+              return (
+                <label
+                  key={dia}
+                  className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    checked
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-background hover:bg-muted"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    name="diaSemana"
+                    value={dia}
+                    checked={checked}
+                    onChange={(e) => {
+                      setDiasSelecionados((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(dia);
+                        else next.delete(dia);
+                        return next;
+                      });
+                    }}
+                    className="sr-only"
+                  />
+                  {DIA_SEMANA_LABEL[dia].slice(0, 3)}
+                </label>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Marque todos os dias em que essa turma se repete — uma turma é criada pra cada
+            dia, todas com o mesmo horário/profissional/tipo.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="diaSemana">Dia da semana</Label>
+          <Select name="diaSemana" items={DIA_SEMANA_LABEL} defaultValue={initial?.diaSemana}>
+            <SelectTrigger id="diaSemana" className="w-full">
+              <SelectValue placeholder="Selecione..." />
+            </SelectTrigger>
+            <SelectContent>
+              {DIA_SEMANA_ORDER.map((dia) => (
+                <SelectItem key={dia} value={dia}>
+                  {DIA_SEMANA_LABEL[dia]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="horario">Horário</Label>
@@ -213,6 +272,80 @@ export function TurmaSlotForm({
           Individual assume 1 vaga automaticamente se deixado em branco.
         </p>
       </div>
+
+      {patients && (
+        <div className="space-y-2">
+          <Label>Pacientes (opcional, já matricula na criação)</Label>
+          {patientIds.size > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {[...patientIds].map((id) => {
+                const p = patients.find((pt) => pt.id === id);
+                if (!p) return null;
+                return (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-xs text-accent-foreground"
+                  >
+                    {p.nomeCompleto}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPatientIds((prev) => {
+                          const next = new Set(prev);
+                          next.delete(id);
+                          return next;
+                        })
+                      }
+                      className="text-accent-foreground/70 hover:text-accent-foreground"
+                      aria-label={`Remover ${p.nomeCompleto}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <Input
+            type="search"
+            placeholder="Buscar paciente ativo..."
+            value={patientSearch}
+            onChange={(e) => setPatientSearch(e.target.value)}
+          />
+          <div className="max-h-40 overflow-y-auto rounded-md border">
+            {filteredPatients.slice(0, 60).map((p) => {
+              const checked = patientIds.has(p.id);
+              return (
+                <label
+                  key={p.id}
+                  className={`flex cursor-pointer items-center gap-2 border-b px-3 py-1.5 text-sm last:border-b-0 hover:bg-muted ${
+                    checked ? "bg-accent/60" : ""
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    name="patientIds"
+                    value={p.id}
+                    checked={checked}
+                    onChange={(e) => {
+                      setPatientIds((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(p.id);
+                        else next.delete(p.id);
+                        return next;
+                      });
+                    }}
+                  />
+                  {p.nomeCompleto}
+                </label>
+              );
+            })}
+            {filteredPatients.length === 0 && (
+              <p className="px-3 py-2 text-xs text-muted-foreground">Nenhum paciente encontrado.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
 

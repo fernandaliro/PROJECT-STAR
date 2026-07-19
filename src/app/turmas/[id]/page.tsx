@@ -8,6 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CopyButton } from "@/components/shared/copy-button";
 import { DeleteTurmaButton } from "@/components/shared/delete-turma-button";
+import { RemoverVinculoButton } from "@/components/shared/remover-vinculo-button";
+import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
+import { BackLink } from "@/components/shared/back-link";
 import { deactivateTurmaSlot } from "@/actions/turmas/actions";
 
 export default async function TurmaDetailPage(
@@ -39,6 +42,8 @@ export default async function TurmaDetailPage(
 
   return (
     <div className="space-y-6">
+      <AgendaSubNav />
+      <BackLink href="/turmas" label="Voltar para Turmas" />
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{nome}</h1>
@@ -109,13 +114,16 @@ export default async function TurmaDetailPage(
                   Entrada: {link.dataEntrada.toLocaleDateString("pt-BR")}
                 </p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                nativeButton={false} render={<Link href={`/turmas/${id}/alta?linkId=${link.id}`} />}
-              >
-                Registrar alta
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  nativeButton={false} render={<Link href={`/turmas/${id}/alta?linkId=${link.id}`} />}
+                >
+                  Registrar alta
+                </Button>
+                <RemoverVinculoButton linkId={link.id} />
+              </div>
             </div>
           ))}
         </TabsContent>

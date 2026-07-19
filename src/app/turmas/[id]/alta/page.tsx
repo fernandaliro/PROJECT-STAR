@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { AltaForm } from "@/components/shared/alta-form";
+import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
+import { BackLink } from "@/components/shared/back-link";
 import { registrarAlta } from "@/actions/turmas/actions";
 
 export default async function AltaPage(
@@ -22,6 +24,8 @@ export default async function AltaPage(
 
   return (
     <div className="space-y-6">
+      <AgendaSubNav />
+      <BackLink href={`/turmas/${id}`} label="Voltar para a turma" />
       <h1 className="text-2xl font-semibold">Registrar alta</h1>
       <AltaForm
         action={registrarAlta}

@@ -151,3 +151,15 @@ export async function rejectSuggestion(suggestionId: string): Promise<void> {
   });
   revalidatePath(`/fila-espera/${suggestion.waitlistEntryId}`);
 }
+
+// Cadastrado na fila por engano — remove a entrada e as sugestões associadas
+// (sugestões são um artefato do motor de encaixe, não histórico de
+// atendimento em si, então não precisam ser preservadas separadamente).
+export async function deleteWaitlistEntry(id: string): Promise<void> {
+  await prisma.$transaction([
+    prisma.waitlistSuggestion.deleteMany({ where: { waitlistEntryId: id } }),
+    prisma.waitlistEntry.delete({ where: { id } }),
+  ]);
+  revalidatePath("/fila-espera");
+  redirect("/fila-espera");
+}

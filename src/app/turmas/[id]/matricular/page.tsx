@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { LinkForm } from "@/components/shared/link-form";
+import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
+import { BackLink } from "@/components/shared/back-link";
 import { createLink } from "@/actions/turmas/actions";
 
 export default async function MatricularPage(
@@ -18,6 +20,8 @@ export default async function MatricularPage(
 
   return (
     <div className="space-y-6">
+      <AgendaSubNav />
+      <BackLink href={`/turmas/${id}`} label="Voltar para a turma" />
       <h1 className="text-2xl font-semibold">Matricular paciente na turma</h1>
       <LinkForm action={createLink} turmaSlotId={id} patients={patients} />
     </div>

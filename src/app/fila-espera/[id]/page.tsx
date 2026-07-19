@@ -9,6 +9,9 @@ import {
   updateWaitlistStatus,
 } from "@/actions/fila-espera/actions";
 import { AcceptSuggestionButton } from "@/components/shared/accept-suggestion-button";
+import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
+import { BackLink } from "@/components/shared/back-link";
+import { DeleteWaitlistEntryButton } from "@/components/shared/delete-waitlist-entry-button";
 
 const TIPO_LABEL: Record<string, string> = {
   exato: "Encaixe exato",
@@ -48,6 +51,8 @@ export default async function FilaEsperaDetailPage(
 
   return (
     <div className="space-y-6">
+      <AgendaSubNav />
+      <BackLink href="/fila-espera" label="Voltar para Fila de espera" />
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold">{entry.patient.nomeCompleto}</h1>
@@ -56,9 +61,12 @@ export default async function FilaEsperaDetailPage(
             {entry.dataEntradaFila.toLocaleDateString("pt-BR")}
           </p>
         </div>
-        <Badge variant={entry.status === "AGUARDANDO" ? "default" : "secondary"}>
-          {entry.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={entry.status === "AGUARDANDO" ? "default" : "secondary"}>
+            {entry.status}
+          </Badge>
+          <DeleteWaitlistEntryButton id={id} />
+        </div>
       </div>
 
       <div className="rounded-md border p-3 text-sm">

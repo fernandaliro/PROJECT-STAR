@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { deactivatePatient, reactivatePatient } from "@/actions/pacientes/actions";
 import { DeletePatientButton } from "@/components/shared/delete-patient-button";
+import { BackLink } from "@/components/shared/back-link";
 import { DIA_SEMANA_LABEL } from "@/lib/constants";
 
 export default async function PacienteDetailPage(
@@ -25,6 +26,7 @@ export default async function PacienteDetailPage(
 
   return (
     <div className="space-y-6">
+      <BackLink href="/pacientes" label="Voltar para Pacientes" />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">{patient.nomeCompleto}</h1>

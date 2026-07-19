@@ -23,10 +23,6 @@ import { DayRosterRow } from "@/components/shared/day-roster-row";
 
 type View = "dia" | "semana" | "mes";
 
-function buildHref(view: View, date: string) {
-  return `/agenda?view=${view}&date=${date}`;
-}
-
 export default async function AgendaPage(props: PageProps<"/agenda">) {
   const searchParams = await props.searchParams;
   const view: View =
@@ -38,11 +34,24 @@ export default async function AgendaPage(props: PageProps<"/agenda">) {
       ? searchParams.date
       : formatDateOnly(new Date());
   const date = toDateOnly(dateParam);
+  const profParam = typeof searchParams.prof === "string" ? searchParams.prof : "";
 
-  const turmaSlots = await prisma.turmaSlot.findMany({
-    where: { ativo: true },
-    include: { professional: true },
-  });
+  function buildHref(v: View, d: string) {
+    const params = new URLSearchParams({ view: v, date: d });
+    if (profParam) params.set("prof", profParam);
+    return `/agenda?${params.toString()}`;
+  }
+
+  const [professionals, turmaSlotsAll] = await Promise.all([
+    prisma.professional.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+    prisma.turmaSlot.findMany({
+      where: { ativo: true },
+      include: { professional: true },
+    }),
+  ]);
+  const turmaSlots = profParam
+    ? turmaSlotsAll.filter((slot) => slot.professionalId === profParam)
+    : turmaSlotsAll;
 
   const byDia = new Map<string, typeof turmaSlots>();
   for (const slot of turmaSlots) {
@@ -73,6 +82,32 @@ export default async function AgendaPage(props: PageProps<"/agenda">) {
             </Button>
           ))}
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          size="xs"
+          variant={!profParam ? "default" : "outline"}
+          nativeButton={false}
+          render={<Link href={buildHref(view, dateParam)} />}
+        >
+          Todos
+        </Button>
+        {professionals.map((prof) => (
+          <Button
+            key={prof.id}
+            size="xs"
+            variant={profParam === prof.id ? "default" : "outline"}
+            nativeButton={false}
+            render={
+              <Link
+                href={`/agenda?${new URLSearchParams({ view, date: dateParam, prof: prof.id }).toString()}`}
+              />
+            }
+          >
+            {prof.nome}
+          </Button>
+        ))}
       </div>
 
       <div className="flex items-center gap-2">
@@ -118,8 +153,12 @@ export default async function AgendaPage(props: PageProps<"/agenda">) {
       {view === "dia" && (
         <DayView date={date} slots={byDia.get(diaSemanaFromDate(date)) ?? []} />
       )}
-      {view === "semana" && <GradeSemanal date={date} byDia={byDia} dateParam={dateParam} />}
-      {view === "mes" && <MonthView date={date} turmaSlots={turmaSlots} />}
+      {view === "semana" && (
+        <GradeSemanal date={date} byDia={byDia} dateParam={dateParam} buildHref={buildHref} />
+      )}
+      {view === "mes" && (
+        <MonthView date={date} turmaSlots={turmaSlots} buildHref={buildHref} />
+      )}
     </div>
   );
 }
@@ -224,10 +263,12 @@ async function GradeSemanal({
   date,
   byDia,
   dateParam,
+  buildHref,
 }: {
   date: Date;
   byDia: Map<string, GradeSlot[]>;
   dateParam: string;
+  buildHref: (view: View, date: string) => string;
 }) {
   const monday = startOfWeek(date);
   const days = DIA_SEMANA_ORDER.map((_, i) => addDays(monday, i));
@@ -328,9 +369,11 @@ async function GradeSemanal({
 async function MonthView({
   date,
   turmaSlots,
+  buildHref,
 }: {
   date: Date;
   turmaSlots: { id: string; diaSemana: string }[];
+  buildHref: (view: View, date: string) => string;
 }) {
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth();

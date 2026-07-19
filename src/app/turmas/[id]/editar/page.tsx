@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TurmaSlotForm } from "@/components/shared/turma-slot-form";
+import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
+import { BackLink } from "@/components/shared/back-link";
 import { updateTurmaSlot } from "@/actions/turmas/actions";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +20,8 @@ export default async function EditarTurmaPage(
 
   return (
     <div className="space-y-6">
+      <AgendaSubNav />
+      <BackLink href={`/turmas/${id}`} label="Voltar para a turma" />
       <h1 className="text-2xl font-semibold">Editar turma</h1>
       <TurmaSlotForm
         action={updateTurmaSlot.bind(null, id)}

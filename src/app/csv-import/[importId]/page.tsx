@@ -9,6 +9,8 @@ import {
   includePacienteNovo,
   resolveDiffResult,
 } from "@/actions/csv-import/actions";
+import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
+import { BackLink } from "@/components/shared/back-link";
 
 export default async function CsvImportDetailPage(
   props: PageProps<"/csv-import/[importId]">
@@ -37,6 +39,8 @@ export default async function CsvImportDetailPage(
 
   return (
     <div className="space-y-6">
+      <AgendaSubNav />
+      <BackLink href="/csv-import" label="Voltar para Importar CSV" />
       <div>
         <h1 className="text-2xl font-semibold">{csvImport.arquivoNome}</h1>
         <p className="text-sm text-muted-foreground">

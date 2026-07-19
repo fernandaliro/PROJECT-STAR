@@ -6,28 +6,33 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/current-user";
 import { isUniqueConstraintError } from "@/lib/errors";
 import { toDateOnly } from "@/lib/dates";
-import { MODALIDADES_EM_GRUPO, VALOR_MULTA_PADRAO } from "@/lib/constants";
+import { DIA_SEMANA_LABEL, MODALIDADES_EM_GRUPO, VALOR_MULTA_PADRAO } from "@/lib/constants";
 import {
   altaSchema,
   linkSchema,
   ocorrenciaSchema,
   turmaSlotSchema,
+  turmaSlotCreateSchema,
 } from "@/lib/validation/turma";
 
 export type ActionState = { error?: string } | undefined;
 
+// Cria uma turma por dia da semana marcado (mesmo horário/profissional/tipo),
+// e já matricula os pacientes selecionados em todas elas — resolve de uma vez
+// o que antes exigia criar dia por dia e matricular paciente por paciente.
 export async function createTurmaSlot(
   _prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const parsed = turmaSlotSchema.safeParse({
-    diaSemana: formData.get("diaSemana"),
+  const parsed = turmaSlotCreateSchema.safeParse({
+    diasSemana: formData.getAll("diaSemana"),
     horario: formData.get("horario"),
     professionalId: formData.get("professionalId"),
     tipoAtendimento: formData.get("tipoAtendimento"),
     modalidade: formData.get("modalidade") || "",
     capacidade: formData.get("capacidade") || "",
     duracaoMinutos: formData.get("duracaoMinutos") || "",
+    patientIds: formData.getAll("patientIds"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -49,19 +54,51 @@ export async function createTurmaSlot(
       : null;
   const duracaoMinutos = data.duracaoMinutos ? Number(data.duracaoMinutos) : null;
 
-  let created;
+  const conflitos = await prisma.turmaSlot.findMany({
+    where: {
+      professionalId: data.professionalId,
+      horario: data.horario,
+      tipoAtendimento: data.tipoAtendimento,
+      diaSemana: { in: data.diasSemana },
+    },
+  });
+  if (conflitos.length > 0) {
+    const dias = conflitos.map((c) => DIA_SEMANA_LABEL[c.diaSemana]).join(", ");
+    return {
+      error: `Já existe uma turma com esse profissional, horário e tipo em: ${dias}.`,
+    };
+  }
+
+  let firstId: string;
   try {
-    created = await prisma.turmaSlot.create({
-      data: {
-        diaSemana: data.diaSemana,
-        horario: data.horario,
-        professionalId: data.professionalId,
-        tipoAtendimento: data.tipoAtendimento,
-        modalidade: data.modalidade || undefined,
-        especialidade: professional.especialidade,
-        capacidade,
-        duracaoMinutos,
-      },
+    firstId = await prisma.$transaction(async (tx) => {
+      const slotIds: string[] = [];
+      for (const dia of data.diasSemana) {
+        const slot = await tx.turmaSlot.create({
+          data: {
+            diaSemana: dia,
+            horario: data.horario,
+            professionalId: data.professionalId,
+            tipoAtendimento: data.tipoAtendimento,
+            modalidade: data.modalidade || undefined,
+            especialidade: professional.especialidade,
+            capacidade,
+            duracaoMinutos,
+          },
+        });
+        slotIds.push(slot.id);
+      }
+      if (data.patientIds && data.patientIds.length > 0) {
+        const dataEntrada = toDateOnly(new Date());
+        for (const turmaSlotId of slotIds) {
+          for (const patientId of data.patientIds) {
+            await tx.patientTurmaLink.create({
+              data: { patientId, turmaSlotId, dataEntrada },
+            });
+          }
+        }
+      }
+      return slotIds[0];
     });
   } catch (error) {
     if (isUniqueConstraintError(error)) {
@@ -71,7 +108,7 @@ export async function createTurmaSlot(
   }
 
   revalidatePath("/turmas");
-  redirect(`/turmas/${created.id}`);
+  redirect(`/turmas/${firstId}`);
 }
 
 function validarGrupoPermitido(
@@ -233,6 +270,34 @@ export async function createLink(
 
   revalidatePath(`/turmas/${data.turmaSlotId}`);
   redirect(`/turmas/${data.turmaSlotId}`);
+}
+
+// Matriculou o paciente errado por engano: remove o vínculo de verdade, mas só
+// se ele ainda não tiver nenhuma ocorrência/falta registrada nem alta — nesses
+// casos já é histórico de verdade, e o caminho correto é "Registrar alta".
+export async function removerVinculo(
+  linkId: string,
+  _prevState: ActionState,
+  _formData: FormData
+): Promise<ActionState> {
+  const link = await prisma.patientTurmaLink.findUnique({ where: { id: linkId } });
+  if (!link) return { error: "Vínculo não encontrado." };
+
+  const [occurrenceEvents, absenceStreak] = await Promise.all([
+    prisma.turmaOccurrenceEvent.count({ where: { linkId } }),
+    prisma.turmaAbsenceStreak.findUnique({ where: { linkId } }),
+  ]);
+
+  if (link.status === "ALTA" || occurrenceEvents > 0 || absenceStreak) {
+    return {
+      error:
+        "Este vínculo já tem histórico (ocorrência registrada ou alta) — não pode ser removido. Se foi um erro de matrícula sem nenhum atendimento ainda, use \"Registrar alta\" para encerrar.",
+    };
+  }
+
+  await prisma.patientTurmaLink.delete({ where: { id: linkId } });
+  revalidatePath(`/turmas/${link.turmaSlotId}`);
+  redirect(`/turmas/${link.turmaSlotId}`);
 }
 
 export async function registrarAlta(

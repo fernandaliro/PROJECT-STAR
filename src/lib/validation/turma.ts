@@ -30,6 +30,13 @@ export const turmaSlotSchema = z.object({
   duracaoMinutos: z.string().optional().or(z.literal("")),
 });
 
+// Criação permite marcar vários dias de uma vez (uma turma por dia é criada)
+// e já matricular pacientes junto, em vez de um dia + uma matrícula por vez.
+export const turmaSlotCreateSchema = turmaSlotSchema.omit({ diaSemana: true }).extend({
+  diasSemana: z.array(z.enum(DIA_SEMANA_VALUES)).min(1, "Selecione ao menos um dia"),
+  patientIds: z.array(z.string()).optional(),
+});
+
 export const linkSchema = z.object({
   patientId: z.string().min(1, "Selecione um paciente"),
   turmaSlotId: z.string().min(1),

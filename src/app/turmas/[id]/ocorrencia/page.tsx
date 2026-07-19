@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { OcorrenciaForm } from "@/components/shared/ocorrencia-form";
+import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
+import { BackLink } from "@/components/shared/back-link";
 import { registrarOcorrencia } from "@/actions/turmas/actions";
 
 export default async function OcorrenciaPage(
@@ -19,6 +21,8 @@ export default async function OcorrenciaPage(
 
   return (
     <div className="space-y-6">
+      <AgendaSubNav />
+      <BackLink href={`/turmas/${id}`} label="Voltar para a turma" />
       <h1 className="text-2xl font-semibold">Registrar desmarcação/falta</h1>
       <OcorrenciaForm
         action={registrarOcorrencia}
