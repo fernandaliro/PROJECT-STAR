@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { CsvUploadForm } from "@/components/shared/csv-upload-form";
 import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
 
+export const dynamic = "force-dynamic";
+
 export default async function CsvImportPage() {
   const [imports, professionals] = await Promise.all([
     prisma.csvImport.findMany({

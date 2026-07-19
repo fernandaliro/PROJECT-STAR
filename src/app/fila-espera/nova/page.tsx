@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { WaitlistEntryForm } from "@/components/shared/waitlist-entry-form";
 import { createWaitlistEntry } from "@/actions/fila-espera/actions";
 
+export const dynamic = "force-dynamic";
+
 export default async function NovaFilaEsperaPage() {
   const [patients, professionals] = await Promise.all([
     prisma.patient.findMany({ where: { status: "ATIVO" }, orderBy: { nomeCompleto: "asc" } }),

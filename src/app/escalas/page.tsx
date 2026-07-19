@@ -5,6 +5,8 @@ import { ScheduleForm } from "@/components/shared/schedule-form";
 import { createSchedule, deactivateSchedule } from "@/actions/escalas/actions";
 import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
 
+export const dynamic = "force-dynamic";
+
 export default async function EscalasPage() {
   const professionals = await prisma.professional.findMany({
     where: { ativo: true },

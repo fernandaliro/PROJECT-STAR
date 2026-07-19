@@ -10,6 +10,8 @@ import {
 import { markPaga } from "@/actions/financeiro/actions";
 import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
 
+export const dynamic = "force-dynamic";
+
 const ORIGEM_LABEL: Record<string, string> = {
   FALTA_INJUSTIFICADA: "Falta injustificada",
 };

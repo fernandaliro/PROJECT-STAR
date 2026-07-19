@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { addDays } from "@/lib/dates";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+// Página lê dados ao vivo do banco a cada visita — sem isso o Next.js tenta
+// pré-renderizar como estática no build, congelando os números.
+export const dynamic = "force-dynamic";
+
 const ESPECIALIDADE_LABEL: Record<string, string> = {
   FISIOTERAPIA: "Fisioterapia",
   ODONTOLOGIA: "Odontologia",

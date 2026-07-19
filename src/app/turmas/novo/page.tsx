@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { TurmaSlotForm } from "@/components/shared/turma-slot-form";
 import { createTurmaSlot } from "@/actions/turmas/actions";
 
+export const dynamic = "force-dynamic";
+
 export default async function NovaTurmaPage() {
   const professionals = await prisma.professional.findMany({
     where: { ativo: true },

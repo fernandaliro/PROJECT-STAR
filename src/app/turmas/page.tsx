@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AgendaSubNav } from "@/components/shared/agenda-sub-nav";
 
+export const dynamic = "force-dynamic";
+
 export default async function TurmasPage() {
   const turmaSlots = await prisma.turmaSlot.findMany({
     where: { ativo: true },
