@@ -8,7 +8,11 @@ export const dynamic = "force-dynamic";
 
 export default async function NovaTurmaPage() {
   const [professionals, patients] = await Promise.all([
-    prisma.professional.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+    prisma.professional.findMany({
+      where: { ativo: true },
+      include: { schedules: { where: { ativo: true, sobDemanda: false } } },
+      orderBy: { nome: "asc" },
+    }),
     prisma.patient.findMany({ where: { status: "ATIVO" }, orderBy: { nomeCompleto: "asc" } }),
   ]);
 

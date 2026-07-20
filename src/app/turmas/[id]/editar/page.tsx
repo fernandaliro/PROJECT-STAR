@@ -14,7 +14,11 @@ export default async function EditarTurmaPage(
 
   const [turmaSlot, professionals] = await Promise.all([
     prisma.turmaSlot.findUnique({ where: { id } }),
-    prisma.professional.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+    prisma.professional.findMany({
+      where: { ativo: true },
+      include: { schedules: { where: { ativo: true, sobDemanda: false } } },
+      orderBy: { nome: "asc" },
+    }),
   ]);
   if (!turmaSlot) notFound();
 

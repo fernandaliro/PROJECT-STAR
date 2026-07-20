@@ -43,7 +43,12 @@ export default async function AgendaPage(props: PageProps<"/agenda">) {
   }
 
   const [professionals, turmaSlotsAll] = await Promise.all([
-    prisma.professional.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+    // Só Fisioterapia tem turma/agenda estruturada hoje — as outras
+    // especialidades não têm nada pra filtrar, então nem entram na lista.
+    prisma.professional.findMany({
+      where: { ativo: true, especialidade: "FISIOTERAPIA" },
+      orderBy: { nome: "asc" },
+    }),
     prisma.turmaSlot.findMany({
       where: { ativo: true },
       include: { professional: true },

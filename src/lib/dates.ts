@@ -40,3 +40,23 @@ export function startOfWeek(date: Date): Date {
   const diff = dow === 0 ? -6 : 1 - dow;
   return addDays(date, diff);
 }
+
+// Lista de horários de meia em meia hora entre start e end (inclusive),
+// formato "HH:MM" — usada pra popular o select de horário de início a partir
+// do expediente cadastrado do profissional.
+export function generateTimeSlots(start: string, end: string): string[] {
+  const slots: string[] = [];
+  let [h, m] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let guard = 0;
+  while ((h < eh || (h === eh && m <= em)) && guard < 100) {
+    slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+    m += 30;
+    if (m >= 60) {
+      m = 0;
+      h += 1;
+    }
+    guard += 1;
+  }
+  return slots;
+}
